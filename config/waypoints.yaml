@@ -1,0 +1,9 @@
+# Mission: A(-9,0) -> WP1(-3,3.5) -> WP2(3,-3.5) -> B(9,0)  [world XY, metres]
+# Regenerate with:  ros2 run gps_nav_robot xy_to_gps.py -- -3,3.5 3,-3.5 9,0
+gps_waypoint_follower:
+  ros__parameters:
+    global_frame: map
+    base_frame: base_footprint
+    finish_radius: 1.0          # finish zone B is 2x2 m
+    latitudes:  [55.75127544, 55.75121256, 55.75124400]
+    longitudes: [38.99995222, 39.00004778, 39.00014333]

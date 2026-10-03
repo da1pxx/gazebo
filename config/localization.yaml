@@ -1,0 +1,97 @@
+# Dual-EKF GPS localization (robot_localization)
+#
+#   ekf_filter_node_odom : wheel twist + IMU          -> odom -> base_footprint  (smooth, drifts)
+#   ekf_filter_node_map  : wheel twist + IMU + GPS    -> map  -> odom            (global, jumps allowed)
+#   navsat_transform     : NavSatFix -> odometry/gps in the map frame; serves fromLL/toLL
+#
+# config vector order: [x y z, roll pitch yaw, vx vy vz, vroll vpitch vyaw, ax ay az]
+
+ekf_filter_node_odom:
+  ros__parameters:
+    use_sim_time: true
+    frequency: 30.0
+    two_d_mode: true
+    publish_tf: true
+    print_diagnostics: true
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_footprint
+    world_frame: odom
+
+    odom0: wheel/odom
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   true,  true,  false,
+                   false, false, true,
+                   false, false, false]
+    odom0_queue_size: 10
+    odom0_differential: false
+
+    imu0: imu/data
+    imu0_config: [false, false, false,
+                  false, false, true,
+                  false, false, false,
+                  false, false, true,
+                  false, false, false]
+    imu0_queue_size: 10
+    imu0_differential: false
+    imu0_remove_gravitational_acceleration: true
+
+ekf_filter_node_map:
+  ros__parameters:
+    use_sim_time: true
+    frequency: 30.0
+    two_d_mode: true
+    publish_tf: true
+    print_diagnostics: true
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_footprint
+    world_frame: map
+
+    odom0: wheel/odom
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   true,  true,  false,
+                   false, false, true,
+                   false, false, false]
+    odom0_queue_size: 10
+    odom0_differential: false
+
+    # absolute position from GPS (output of navsat_transform)
+    odom1: odometry/gps
+    odom1_config: [true,  true,  false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    odom1_queue_size: 10
+    odom1_differential: false
+
+    imu0: imu/data
+    imu0_config: [false, false, false,
+                  false, false, true,
+                  false, false, false,
+                  false, false, true,
+                  false, false, false]
+    imu0_queue_size: 10
+    imu0_differential: false
+    imu0_remove_gravitational_acceleration: true
+
+navsat_transform:
+  ros__parameters:
+    use_sim_time: true
+    frequency: 30.0
+    delay: 3.0
+    magnetic_declination_radians: 0.0   # sim IMU yaw is true-north referenced
+    yaw_offset: 0.0                     # IMU reports 0 when facing East (ENU)
+    zero_altitude: true
+    publish_filtered_gps: true
+    broadcast_cartesian_transform: false
+    use_odometry_yaw: false
+    # No fixed datum: the map<-GPS transform is computed from the first fix, the IMU yaw
+    # and the current ekf_map pose (the standard, well-tested navsat path). The map origin
+    # is therefore the robot's start pose A, not the Gazebo world origin. Waypoints stay
+    # correct because they go through fromLL, which uses the same transform.
+    use_local_cartesian: false
+    wait_for_datum: false

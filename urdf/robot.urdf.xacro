@@ -1,0 +1,140 @@
+<?xml version="1.0"?>
+<!--
+  gps_bot: differential-drive robot with
+    - 2D lidar            (gazebo_ros_ray_sensor)     -> /scan
+    - Orbbec Astra-like depth camera (gazebo_ros_camera, type=depth)
+                                                      -> /camera/depth/image_raw, /camera/points
+    - GPS receiver        (gazebo_ros_gps_sensor)     -> /gps/fix
+    - IMU                 (gazebo_ros_imu_sensor)     -> /imu/data
+    - diff drive          (gazebo_ros_diff_drive)     <- /cmd_vel, -> /wheel/odom
+-->
+<robot name="gps_bot" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:include filename="inertial_macros.xacro"/>
+
+  <!-- ================= Dimensions ================= -->
+  <xacro:property name="PI"        value="3.14159265359"/>
+  <xacro:property name="chassis_l" value="0.50"/>
+  <xacro:property name="chassis_w" value="0.40"/>
+  <xacro:property name="chassis_h" value="0.15"/>
+  <xacro:property name="chassis_z" value="0.05"/>  <!-- chassis centre above wheel axle -->
+  <xacro:property name="wheel_r"   value="0.10"/>
+  <xacro:property name="wheel_w"   value="0.05"/>
+  <xacro:property name="wheel_sep" value="0.45"/>
+  <xacro:property name="caster_r"  value="0.05"/>
+  <xacro:property name="caster_x"  value="0.18"/>
+
+  <material name="blue">  <color rgba="0.15 0.35 0.80 1.0"/></material>
+  <material name="black"> <color rgba="0.10 0.10 0.10 1.0"/></material>
+  <material name="grey">  <color rgba="0.60 0.60 0.60 1.0"/></material>
+  <material name="orange"><color rgba="1.00 0.50 0.00 1.0"/></material>
+
+  <!-- ================= Base ================= -->
+  <link name="base_footprint"/>
+
+  <joint name="base_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 ${wheel_r}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 ${chassis_z}" rpy="0 0 0"/>
+      <geometry><box size="${chassis_l} ${chassis_w} ${chassis_h}"/></geometry>
+      <material name="blue"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${chassis_z}" rpy="0 0 0"/>
+      <geometry><box size="${chassis_l} ${chassis_w} ${chassis_h}"/></geometry>
+    </collision>
+    <xacro:box_inertia m="8.0" x="${chassis_l}" y="${chassis_w}" z="${chassis_h}" xyz="0 0 ${chassis_z}"/>
+  </link>
+  <gazebo reference="base_link"><material>Gazebo/Blue</material></gazebo>
+
+  <!-- ================= Wheels ================= -->
+  <xacro:macro name="wheel" params="side y">
+    <link name="${side}_wheel_link">
+      <visual>
+        <geometry><cylinder radius="${wheel_r}" length="${wheel_w}"/></geometry>
+        <material name="black"/>
+      </visual>
+      <collision>
+        <geometry><cylinder radius="${wheel_r}" length="${wheel_w}"/></geometry>
+      </collision>
+      <xacro:cylinder_inertia m="0.5" r="${wheel_r}" h="${wheel_w}"/>
+    </link>
+    <!-- rpy -pi/2 about X puts the wheel axis (link Z) along +Y of base_link for both wheels -->
+    <joint name="${side}_wheel_joint" type="continuous">
+      <parent link="base_link"/>
+      <child link="${side}_wheel_link"/>
+      <origin xyz="0 ${y} 0" rpy="${-PI/2} 0 0"/>
+      <axis xyz="0 0 1"/>
+    </joint>
+    <gazebo reference="${side}_wheel_link">
+      <mu1>1.0</mu1>
+      <mu2>1.0</mu2>
+      <material>Gazebo/Black</material>
+    </gazebo>
+  </xacro:macro>
+
+  <xacro:wheel side="left"  y="${wheel_sep/2}"/>
+  <xacro:wheel side="right" y="${-wheel_sep/2}"/>
+
+  <!-- ================= Casters (frictionless) ================= -->
+  <xacro:macro name="caster" params="name x">
+    <link name="${name}_caster_link">
+      <visual>
+        <geometry><sphere radius="${caster_r}"/></geometry>
+        <material name="grey"/>
+      </visual>
+      <collision>
+        <geometry><sphere radius="${caster_r}"/></geometry>
+      </collision>
+      <xacro:sphere_inertia m="0.2" r="${caster_r}"/>
+    </link>
+    <joint name="${name}_caster_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="${name}_caster_link"/>
+      <origin xyz="${x} 0 ${caster_r - wheel_r}" rpy="0 0 0"/>
+    </joint>
+    <gazebo reference="${name}_caster_link">
+      <mu1>0.0</mu1>
+      <mu2>0.0</mu2>
+      <material>Gazebo/Grey</material>
+    </gazebo>
+  </xacro:macro>
+
+  <xacro:caster name="front" x="${caster_x}"/>
+  <xacro:caster name="rear"  x="${-caster_x}"/>
+
+  <!-- ================= Gazebo control plugins ================= -->
+  <gazebo>
+    <plugin name="diff_drive" filename="libgazebo_ros_diff_drive.so">
+      <ros>
+        <remapping>odom:=wheel/odom</remapping>
+      </ros>
+      <update_rate>50</update_rate>
+      <left_joint>left_wheel_joint</left_joint>
+      <right_joint>right_wheel_joint</right_joint>
+      <wheel_separation>${wheel_sep}</wheel_separation>
+      <wheel_diameter>${2*wheel_r}</wheel_diameter>
+      <max_wheel_torque>20</max_wheel_torque>
+      <max_wheel_acceleration>10.0</max_wheel_acceleration>
+      <odometry_source>0</odometry_source>   <!-- 0 = encoder, realistic drift -->
+      <publish_odom>true</publish_odom>
+      <publish_odom_tf>false</publish_odom_tf> <!-- odom->base_footprint comes from EKF -->
+      <publish_wheel_tf>false</publish_wheel_tf>
+      <odometry_frame>odom</odometry_frame>
+      <robot_base_frame>base_footprint</robot_base_frame>
+    </plugin>
+
+    <plugin name="joint_states" filename="libgazebo_ros_joint_state_publisher.so">
+      <update_rate>30</update_rate>
+      <joint_name>left_wheel_joint</joint_name>
+      <joint_name>right_wheel_joint</joint_name>
+    </plugin>
+  </gazebo>
+
+  <xacro:include filename="sensors.xacro"/>
+</robot>

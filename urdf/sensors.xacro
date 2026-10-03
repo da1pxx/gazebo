@@ -1,0 +1,181 @@
+<?xml version="1.0"?>
+<!-- Sensor links + Gazebo sensor plugins. Every plugin sets frame_name explicitly:
+     Gazebo lumps fixed-joint links into base_link, so the default frame would be wrong. -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- ================= 2D lidar ================= -->
+  <link name="lidar_link">
+    <visual>
+      <geometry><cylinder radius="0.05" length="0.05"/></geometry>
+      <material name="black"/>
+    </visual>
+    <collision>
+      <geometry><cylinder radius="0.05" length="0.05"/></geometry>
+    </collision>
+    <xacro:cylinder_inertia m="0.1" r="0.05" h="0.05"/>
+  </link>
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="lidar_link"/>
+    <origin xyz="0.10 0 ${chassis_z + chassis_h/2 + 0.025}" rpy="0 0 0"/>
+  </joint>
+
+  <gazebo reference="lidar_link">
+    <material>Gazebo/Black</material>
+    <sensor name="lidar" type="ray">
+      <always_on>true</always_on>
+      <visualize>false</visualize>
+      <update_rate>10</update_rate>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>360</samples>
+            <resolution>1</resolution>
+            <min_angle>-3.14159</min_angle>
+            <max_angle>3.14159</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.12</min>
+          <max>12.0</max>
+          <resolution>0.01</resolution>
+        </range>
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.01</stddev>
+        </noise>
+      </ray>
+      <plugin name="lidar_plugin" filename="libgazebo_ros_ray_sensor.so">
+        <ros><remapping>~/out:=scan</remapping></ros>
+        <output_type>sensor_msgs/LaserScan</output_type>
+        <frame_name>lidar_link</frame_name>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- ================= Depth camera (Orbbec Astra emulation) =================
+       Astra: 60 deg HFOV, depth 0.6..8 m, 640x480@30.
+       Resolution halved to 320x240@15 to keep the voxel layer real-time in sim. -->
+  <link name="camera_link">
+    <visual>
+      <geometry><box size="0.04 0.165 0.03"/></geometry>
+      <material name="orange"/>
+    </visual>
+    <collision>
+      <geometry><box size="0.04 0.165 0.03"/></geometry>
+    </collision>
+    <xacro:box_inertia m="0.1" x="0.04" y="0.165" z="0.03"/>
+  </link>
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <origin xyz="${chassis_l/2 + 0.02} 0 ${chassis_z + 0.03}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- REP-103 optical frame: z forward, x right, y down -->
+  <link name="camera_depth_optical_frame"/>
+  <joint name="camera_optical_joint" type="fixed">
+    <parent link="camera_link"/>
+    <child link="camera_depth_optical_frame"/>
+    <origin xyz="0 0 0" rpy="${-PI/2} 0 ${-PI/2}"/>
+  </joint>
+
+  <gazebo reference="camera_link">
+    <material>Gazebo/Orange</material>
+    <sensor name="astra_depth" type="depth">
+      <always_on>true</always_on>
+      <visualize>false</visualize>
+      <update_rate>15</update_rate>
+      <camera>
+        <horizontal_fov>1.0472</horizontal_fov>
+        <image>
+          <width>320</width>
+          <height>240</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip>
+          <near>0.05</near>
+          <far>10.0</far>
+        </clip>
+      </camera>
+      <plugin name="astra_plugin" filename="libgazebo_ros_camera.so">
+        <camera_name>camera</camera_name>
+        <frame_name>camera_depth_optical_frame</frame_name>
+        <hack_baseline>0.07</hack_baseline>
+        <min_depth>0.6</min_depth>
+        <max_depth>8.0</max_depth>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- ================= GPS ================= -->
+  <link name="gps_link">
+    <visual>
+      <geometry><cylinder radius="0.03" length="0.02"/></geometry>
+      <material name="grey"/>
+    </visual>
+    <xacro:cylinder_inertia m="0.05" r="0.03" h="0.02"/>
+  </link>
+  <joint name="gps_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="gps_link"/>
+    <origin xyz="-0.15 0 ${chassis_z + chassis_h/2 + 0.01}" rpy="0 0 0"/>
+  </joint>
+
+  <gazebo reference="gps_link">
+    <sensor name="gps" type="gps">
+      <always_on>true</always_on>
+      <update_rate>10</update_rate>
+      <gps>
+        <position_sensing>
+          <horizontal>
+            <noise type="gaussian"><mean>0.0</mean><stddev>0.05</stddev></noise>
+          </horizontal>
+          <vertical>
+            <noise type="gaussian"><mean>0.0</mean><stddev>0.10</stddev></noise>
+          </vertical>
+        </position_sensing>
+      </gps>
+      <plugin name="gps_plugin" filename="libgazebo_ros_gps_sensor.so">
+        <ros><remapping>~/out:=gps/fix</remapping></ros>
+        <frame_name>gps_link</frame_name>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- ================= IMU ================= -->
+  <link name="imu_link">
+    <xacro:box_inertia m="0.02" x="0.02" y="0.02" z="0.01"/>
+  </link>
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0 0 ${chassis_z}" rpy="0 0 0"/>
+  </joint>
+
+  <gazebo reference="imu_link">
+    <sensor name="imu" type="imu">
+      <always_on>true</always_on>
+      <update_rate>50</update_rate>
+      <imu>
+        <angular_velocity>
+          <x><noise type="gaussian"><mean>0.0</mean><stddev>2e-4</stddev></noise></x>
+          <y><noise type="gaussian"><mean>0.0</mean><stddev>2e-4</stddev></noise></y>
+          <z><noise type="gaussian"><mean>0.0</mean><stddev>2e-4</stddev></noise></z>
+        </angular_velocity>
+        <linear_acceleration>
+          <x><noise type="gaussian"><mean>0.0</mean><stddev>1.7e-2</stddev></noise></x>
+          <y><noise type="gaussian"><mean>0.0</mean><stddev>1.7e-2</stddev></noise></y>
+          <z><noise type="gaussian"><mean>0.0</mean><stddev>1.7e-2</stddev></noise></z>
+        </linear_acceleration>
+      </imu>
+      <plugin name="imu_plugin" filename="libgazebo_ros_imu_sensor.so">
+        <ros><remapping>~/out:=imu/data</remapping></ros>
+        <!-- absolute (ENU) yaw, required by navsat_transform -->
+        <initial_orientation_as_reference>false</initial_orientation_as_reference>
+        <frame_name>imu_link</frame_name>
+      </plugin>
+    </sensor>
+  </gazebo>
+</robot>
